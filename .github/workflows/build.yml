@@ -1,0 +1,150 @@
+name: Build and Push Docker Image
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'base/**'
+      - 'versions.yaml'
+      - 'build.sh'
+      - '.github/workflows/build.yml'
+    tags:
+      - 'v*'
+  pull_request:
+    paths:
+      - 'base/**'
+      - 'versions.yaml'
+      - 'build.sh'
+      - '.github/workflows/build.yml'
+
+jobs:
+  build:
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      packages: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract versions
+        id: versions
+        run: |
+          PROJECT_VERSION=$(python3 -c "import yaml; print(yaml.safe_load(open('versions.yaml'))['project']['version'])")
+          CC_PROXY_VERSION=$(python3 -c "import yaml; print(yaml.safe_load(open('versions.yaml'))['cc_proxy']['version'])")
+          MULTICA_VERSION=$(python3 -c "import yaml; print(yaml.safe_load(open('versions.yaml'))['multica']['version'])")
+          MULTICA_STDIO_MCP_PROXY_VERSION=$(python3 -c "import yaml; print(yaml.safe_load(open('versions.yaml'))['multica_stdio_mcp_proxy']['version'])")
+          CLAUDE_CODE_VERSION=$(python3 -c "import yaml; print(yaml.safe_load(open('versions.yaml'))['claude_code']['version'])")
+          echo "PROJECT_VERSION=$PROJECT_VERSION" >> $GITHUB_OUTPUT
+          echo "CC_PROXY_VERSION=$CC_PROXY_VERSION" >> $GITHUB_OUTPUT
+          echo "MULTICA_VERSION=$MULTICA_VERSION" >> $GITHUB_OUTPUT
+          echo "MULTICA_STDIO_MCP_PROXY_VERSION=$MULTICA_STDIO_MCP_PROXY_VERSION" >> $GITHUB_OUTPUT
+          echo "CLAUDE_CODE_VERSION=$CLAUDE_CODE_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Download private release binaries (cc-proxy, multica-stdio-mcp-proxy)
+        env:
+          GH_TOKEN: ${{ secrets.CC_PROXY_TOKEN }}
+          CC_PROXY_VERSION: ${{ steps.versions.outputs.CC_PROXY_VERSION }}
+          MULTICA_STDIO_MCP_PROXY_VERSION: ${{ steps.versions.outputs.MULTICA_STDIO_MCP_PROXY_VERSION }}
+        run: |
+          set -e
+          if [ -z "${GH_TOKEN}" ]; then
+            echo "ERROR: CC_PROXY_TOKEN secret not set (token with contents:read on courage-zen/cc-proxy and courage-zen/multica-stdio-mcp-proxy)" >&2
+            exit 1
+          fi
+          mkdir -p binaries/amd64 binaries/arm64
+          gh release download "v${CC_PROXY_VERSION}" -R courage-zen/cc-proxy \
+            -p "cc-proxy-amd64" -O "binaries/amd64/cc-proxy" --clobber
+          gh release download "v${CC_PROXY_VERSION}" -R courage-zen/cc-proxy \
+            -p "cc-proxy-arm64" -O "binaries/arm64/cc-proxy" --clobber
+          gh release download "v${MULTICA_STDIO_MCP_PROXY_VERSION}" -R courage-zen/multica-stdio-mcp-proxy \
+            -p "multica-stdio-mcp-proxy-linux-amd64" -O "binaries/amd64/multica-stdio-mcp-proxy" --clobber
+          gh release download "v${MULTICA_STDIO_MCP_PROXY_VERSION}" -R courage-zen/multica-stdio-mcp-proxy \
+            -p "multica-stdio-mcp-proxy-linux-arm64" -O "binaries/arm64/multica-stdio-mcp-proxy" --clobber
+          chmod +x binaries/amd64/* binaries/arm64/*
+
+      - name: Build amd64
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./base/Dockerfile
+          platforms: linux/amd64
+          push: ${{ github.event_name == 'push' }}
+          tags: |
+            ghcr.io/courage-zen/cc-sandbox-runtime:latest-amd64
+            ghcr.io/courage-zen/cc-sandbox-runtime:${{ steps.versions.outputs.PROJECT_VERSION }}-amd64
+          build-args: |
+            MULTICA_VERSION=${{ steps.versions.outputs.MULTICA_VERSION }}
+            CLAUDE_CODE_VERSION=${{ steps.versions.outputs.CLAUDE_CODE_VERSION }}
+            TARGETARCH=amd64
+
+      - name: Build arm64
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./base/Dockerfile
+          platforms: linux/arm64
+          push: ${{ github.event_name == 'push' }}
+          tags: |
+            ghcr.io/courage-zen/cc-sandbox-runtime:latest-arm64
+            ghcr.io/courage-zen/cc-sandbox-runtime:${{ steps.versions.outputs.PROJECT_VERSION }}-arm64
+          build-args: |
+            MULTICA_VERSION=${{ steps.versions.outputs.MULTICA_VERSION }}
+            CLAUDE_CODE_VERSION=${{ steps.versions.outputs.CLAUDE_CODE_VERSION }}
+            TARGETARCH=arm64
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+      packages: read
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract versions
+        id: version
+        run: |
+          TAG_VERSION=${GITHUB_REF#refs/tags/v}
+          echo "TAG_VERSION=$TAG_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull and save images
+        run: |
+          docker pull --platform linux/amd64 ghcr.io/courage-zen/cc-sandbox-runtime:${{ steps.version.outputs.TAG_VERSION }}-amd64
+          docker save ghcr.io/courage-zen/cc-sandbox-runtime:${{ steps.version.outputs.TAG_VERSION }}-amd64 | gzip > cc-sandbox-runtime-amd64.tar.gz
+
+          docker pull --platform linux/arm64 ghcr.io/courage-zen/cc-sandbox-runtime:${{ steps.version.outputs.TAG_VERSION }}-arm64
+          docker save ghcr.io/courage-zen/cc-sandbox-runtime:${{ steps.version.outputs.TAG_VERSION }}-arm64 | gzip > cc-sandbox-runtime-arm64.tar.gz
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          files: |
+            cc-sandbox-runtime-amd64.tar.gz
+            cc-sandbox-runtime-arm64.tar.gz
