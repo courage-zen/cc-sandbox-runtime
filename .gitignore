@@ -1,0 +1,7 @@
+run.sh
+*.local.yaml
+*.secret.yaml
+.env
+binaries/
+.DS_Store
+docs/
