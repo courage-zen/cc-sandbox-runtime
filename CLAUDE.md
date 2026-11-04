@@ -4,7 +4,7 @@ Docker 容器化的 Claude Code + multica agent 沙箱运行时镜像（自 agen
 
 ## 项目结构
 
-- `base/` — 镜像构建（Claude Code via npm on Node.js 22 + cc-proxy + multica + multica-stdio-mcp-proxy + bubblewrap/socat/ripgrep 沙箱依赖）
+- `Dockerfile` / `entrypoint.sh` — 镜像构建（Claude Code via npm on Node.js 22 + cc-proxy + multica + multica-stdio-mcp-proxy + bubblewrap/socat/ripgrep 沙箱依赖）
 - `versions.yaml` — 镜像与依赖版本号（单一事实源）
 - `build.sh` — 本地构建脚本
 - `config/` — 配置模板（example 文件 + seccomp profile，不含敏感数据）

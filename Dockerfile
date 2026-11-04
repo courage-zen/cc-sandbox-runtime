@@ -42,7 +42,7 @@ COPY --from=claude-install /usr/local/lib/node_modules/@anthropic-ai/claude-code
                           /usr/local/lib/node_modules/@anthropic-ai/claude-code
 RUN ln -sf /usr/local/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe /usr/local/bin/claude && \
     ln -sf /usr/local/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe /usr/local/bin/claude-code
-COPY base/entrypoint.sh /entrypoint.sh
+COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh && \
     mkdir -p /home/agent/wiki /home/agent/.claude/skills && \
     git config --system credential.helper store && \

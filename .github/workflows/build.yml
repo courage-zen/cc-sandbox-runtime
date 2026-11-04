@@ -5,7 +5,8 @@ on:
     branches:
       - main
     paths:
-      - 'base/**'
+      - 'Dockerfile'
+      - 'entrypoint.sh'
       - 'versions.yaml'
       - 'build.sh'
       - '.github/workflows/build.yml'
@@ -13,7 +14,8 @@ on:
       - 'v*'
   pull_request:
     paths:
-      - 'base/**'
+      - 'Dockerfile'
+      - 'entrypoint.sh'
       - 'versions.yaml'
       - 'build.sh'
       - '.github/workflows/build.yml'
@@ -82,7 +84,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./base/Dockerfile
+          file: ./Dockerfile
           platforms: linux/amd64
           push: ${{ github.event_name == 'push' }}
           tags: |
@@ -97,7 +99,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./base/Dockerfile
+          file: ./Dockerfile
           platforms: linux/arm64
           push: ${{ github.event_name == 'push' }}
           tags: |

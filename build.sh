@@ -63,6 +63,6 @@ echo "  MULTICA_VERSION=${MULTICA_VERSION}"
 echo "  MULTICA_STDIO_MCP_PROXY_VERSION=${MULTICA_STDIO_MCP_PROXY_VERSION}"
 echo "  CLAUDE_CODE_VERSION=${CLAUDE_CODE_VERSION}"
 
-docker build --progress=plain -f "${SCRIPT_DIR}/base/Dockerfile" "${BUILD_ARGS[@]}" -t "${TAG}" "${SCRIPT_DIR}" || {
+docker build --progress=plain -f "${SCRIPT_DIR}/Dockerfile" "${BUILD_ARGS[@]}" -t "${TAG}" "${SCRIPT_DIR}" || {
     echo "Error: docker build failed for ${TAG}" >&2; exit 1
 }
